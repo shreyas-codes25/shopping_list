@@ -1,4 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:shopping_list/data/categories.dart';
 
 import '../models/grocery_item.dart';
 import 'new_item.dart';
@@ -11,7 +15,14 @@ class GroceryList extends StatefulWidget {
 }
 
 class _GroceryListState extends State<GroceryList> {
-  final List<GroceryItem> _groceryItems = [];
+  List<GroceryItem> _groceryItems = [];
+  var isLoading = true;
+
+  @override
+  void initState() {
+    loadItems();
+    super.initState();
+  }
 
   void _addItem() async {
     final newItem =
@@ -19,16 +30,44 @@ class _GroceryListState extends State<GroceryList> {
       builder: (context) => const NewItem(),
     ));
 
-    if (newItem != null) {
-      setState(() {
-        _groceryItems.add(newItem);
-      });
+    if (newItem == null) {
+      return;
     }
+    setState(() {
+      _groceryItems.add(newItem);
+      isLoading = false;
+    });
   }
 
-  void _removeItem(item){
+  void _removeItem(item) {
     setState(() {
       _groceryItems.remove(item);
+    });
+  }
+
+  void loadItems() async {
+    final url = Uri.https(
+        "flutter-prep-dd7a1-default-rtdb.firebaseio.com", 'shopping-list.json');
+    final response = await http.get(url);
+    final Map<String, dynamic> listData = json.decode(response.body);
+    final List<GroceryItem> loadedItems = [];
+    for (final item in listData.entries) {
+      final category = categories.entries
+          .firstWhere(
+              (element) => element.value.title == item.value['category'])
+          .value;
+      loadedItems.add(
+        GroceryItem(
+          id: item.key,
+          name: item.value['name'],
+          quantity: item.value['quantity'],
+          category: category,
+        ),
+      );
+    }
+
+    setState(() {
+      _groceryItems = loadedItems;
     });
   }
 
@@ -40,15 +79,18 @@ class _GroceryListState extends State<GroceryList> {
       style: Theme.of(context).textTheme.headlineSmall,
     ));
 
+    if (isLoading) {
+      content = const Center(child: CircularProgressIndicator());
+    }
     if (_groceryItems.isNotEmpty) {
       content = ListView.builder(
           itemCount: _groceryItems.length,
           itemBuilder: (context, index) => Dismissible(
-            onDismissed: (direction){
-              _removeItem(_groceryItems[index]);
-            },
-            key: ValueKey(_groceryItems[index].id),
-            child: ListTile(
+                onDismissed: (direction) {
+                  _removeItem(_groceryItems[index]);
+                },
+                key: ValueKey(_groceryItems[index].id),
+                child: ListTile(
                   onTap: () {},
                   title: Text(_groceryItems[index].name),
                   trailing: Text(_groceryItems[index].quantity.toString()),
@@ -58,7 +100,7 @@ class _GroceryListState extends State<GroceryList> {
                     color: _groceryItems[index].category.color,
                   ),
                 ),
-          ));
+              ));
     }
     return Scaffold(
       appBar: AppBar(
